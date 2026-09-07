@@ -1,0 +1,7 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;700&family=Space+Grotesk:wght@400;500;700&display=swap');
+:root { --paper: #f3f0e9; --ink: #20211d; --muted: #85857b; --line: #d5d2c9; --lime: #c6e842; --coral: #f17b5b; --blue: #6c9ce8; --accent: var(--lime); --accent-soft: #e9f2c2; --sans: 'DM Sans', sans-serif; --display: 'Space Grotesk', sans-serif; --mono: 'DM Mono', monospace; font-family: var(--sans); color: var(--ink); background: var(--paper); font-synthesis: none; text-rendering: optimizeLegibility; -webkit-font-smoothing: antialiased; }
+.coral { --accent: var(--coral); --accent-soft: #f8ded3; }
+.blue { --accent: var(--blue); --accent-soft: #dde7f6; }
+* { box-sizing: border-box; }
+body { margin: 0; min-width: 320px; }
+button, a { -webkit-tap-highlight-color: transparent; }
