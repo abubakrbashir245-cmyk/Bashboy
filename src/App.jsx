@@ -1,104 +1,95 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import './App.css'
 
-const SCOREBOARD_URL = 'https://site.api.espn.com/apis/site/v2/sports/soccer/eng.1/scoreboard'
-const DRAFT_KINGS_LOGO = 'https://a.espncdn.com/i/betting/Draftkings_Dark.svg'
+const API_KEY = import.meta.env.VITE_OPENWEATHER_API_KEY || '4ca8b5cab2d64f1db32125038261908'
+const CITY = 'Lagos,NG'
 
-function getTeams(competition) {
-  const competitors = competition.competitors ?? []
-  return {
-    home: competitors.find((team) => team.homeAway === 'home') ?? competitors[0],
-    away: competitors.find((team) => team.homeAway === 'away') ?? competitors[1],
-  }
+const DEMO_DATA = {
+  humidity: 77,
+  temp: 28,
+  status: 'Very humid',
+  emoji: '😮‍💨',
+  desc: 'Steady at 77%. Extremely humid conditions expected in the evening.',
 }
 
-function getMatchStatus(status) {
-  if (status?.type?.state === 'in') return `LIVE ${status.displayClock || status.detail || ''}`.trim()
-  return status?.type?.shortDetail || status?.type?.detail || 'Scheduled'
+function getStatus(humidity) {
+  if (humidity >= 80) return { label: 'Very humid', emoji: '😮‍💨', desc: `Steady at ${humidity}%. Extremely humid conditions expected in the evening.` }
+  if (humidity >= 60) return { label: 'Humid', emoji: '😓', desc: `Humidity at ${humidity}%. Muggy conditions.` }
+  if (humidity >= 40) return { label: 'Comfortable', emoji: '😊', desc: `Humidity at ${humidity}%. Comfortable conditions.` }
+  return { label: 'Dry', emoji: '😮', desc: `Humidity at ${humidity}%. Dry conditions.` }
 }
 
-function App() {
-  const [fixtures, setFixtures] = useState([])
-  const [status, setStatus] = useState('loading')
-  const [lastUpdated, setLastUpdated] = useState(null)
+function calculateDewPoint(temp, humidity) {
+  return Math.round(temp - (100 - humidity) / 5)
+}
 
-  const loadFixtures = useCallback(async (signal) => {
-    try {
-      const response = await fetch(SCOREBOARD_URL, { signal })
-      if (!response.ok) throw new Error(`Scoreboard request failed: ${response.status}`)
-      const data = await response.json()
-      setFixtures(data.events ?? [])
-      setLastUpdated(new Date())
-      setStatus('success')
-    } catch (error) {
-      if (error.name !== 'AbortError') setStatus('error')
-    }
-  }, [])
+function HumidityCard() {
+  const [humidity, setHumidity] = useState(DEMO_DATA.humidity)
+  const [dew, setDew] = useState(24)
+  const [status, setStatus] = useState(getStatus(DEMO_DATA.humidity))
 
   useEffect(() => {
-    const controller = new AbortController()
-    const initialLoad = window.setTimeout(() => loadFixtures(controller.signal), 0)
-    const refreshTimer = window.setInterval(() => loadFixtures(), 60_000)
-    return () => {
-      controller.abort()
-      window.clearTimeout(initialLoad)
-      window.clearInterval(refreshTimer)
+    let ignore = false
+
+    async function getHumidityData() {
+      try {
+        const response = await fetch(`https://api.openweathermap.org/data/2.5/weather?q=${CITY}&appid=${API_KEY}&units=metric`)
+        if (!response.ok) throw new Error('Weather request failed')
+
+        const data = await response.json()
+        const nextHumidity = data.main?.humidity ?? DEMO_DATA.humidity
+        const currentTemp = data.main?.temp ?? DEMO_DATA.temp
+        if (ignore) return
+
+        setHumidity(nextHumidity)
+        setDew(calculateDewPoint(currentTemp, nextHumidity))
+        setStatus(getStatus(nextHumidity))
+      } catch (error) {
+        console.warn('Weather API unavailable, using demo data', error)
+      }
     }
-  }, [loadFixtures])
+
+    getHumidityData()
+    return () => { ignore = true }
+  }, [])
+
+  const filledBars = Math.round((humidity / 100) * 7)
 
   return (
-    <main className="app-shell">
-      <SiteHeader />
-      <section className="hero">
-        <p className="eyebrow">Premier League <span>/</span> Matchday centre</p>
-        <h1>The beautiful game<span className="title-dot">.</span></h1>
-        <p className="intro-copy">Scores and fixtures from England&apos;s top flight, refreshed automatically every minute.</p>
-      </section>
+    <main className="weather-page">
+      <section className="humidity-card" aria-labelledby="humidity-title">
+        <div className="card-header">
+          <div>
+            <p className="eyebrow">Live weather / Lagos</p>
+            <h1 id="humidity-title">Humidity</h1>
+          </div>
+          <span className="weather-dot" aria-label="Live data" />
+        </div>
 
-      <FootballPage fixtures={fixtures} status={status} lastUpdated={lastUpdated} onRefresh={() => { setStatus('loading'); loadFixtures() }} />
-      <SiteFooter />
+        <div className="humidity-summary">
+          <div className="humidity-bars" aria-label={`${humidity}% relative humidity`}>
+            {Array.from({ length: 7 }).map((_, index) => (
+              <span
+                key={index}
+                className={index < filledBars ? 'humidity-bar filled' : 'humidity-bar'}
+                style={{ height: `${(index + 1) * 18}px` }}
+              />
+            ))}
+          </div>
+
+          <div className="measurements">
+            <p className="large-measurement">{humidity}<span>%</span></p>
+            <p className="measurement-label">Relative Humidity</p>
+            <p className="dew-measurement">{dew}<span>°</span></p>
+            <p className="measurement-label">Dew point</p>
+          </div>
+        </div>
+
+        <p className="humidity-status">{status.label} <span>{status.emoji}</span></p>
+        <p className="humidity-description">{status.desc}</p>
+      </section>
     </main>
   )
 }
 
-function SiteHeader() {
-  return <header className="site-header">
-    <a className="brand" href="/">
-      <span className="brand-mark">90</span>
-      <span>Matchday</span>
-    </a>
-    <nav aria-label="Sections"><a className="nav-link active" href="#fixtures">Fixtures</a><a className="nav-link" href="#table">The table</a></nav>
-    <div className="edition"><span className="status-dot"></span>Live feeds</div>
-  </header>
-}
-
-function FootballPage({ fixtures, status, lastUpdated, onRefresh }) {
-  return <section className="content-section football-page" id="fixtures">
-    <div className="section-heading"><div><p className="section-kicker">Match centre</p><h2>On the pitch</h2>{lastUpdated && <p className="updated">Updated {lastUpdated.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</p>}<div className="odds"><img src={DRAFT_KINGS_LOGO} alt="" /> <span>Odds by Draft Kings</span></div></div><button className="refresh-button" type="button" onClick={onRefresh} disabled={status === 'loading'}>{status === 'loading' ? 'Updating...' : 'Refresh scores'}</button></div>
-    {status === 'loading' && fixtures.length === 0 && <LoadingState />}
-    {status === 'error' && <p className="message error">Scores could not be loaded. Check your connection and try again.</p>}
-    {status === 'success' && fixtures.length === 0 && <p className="message">No Premier League matches are scheduled for today.</p>}
-    {fixtures.length > 0 && <div className="fixture-grid">{fixtures.map((event) => {
-      const competition = event.competitions?.[0] ?? {}
-      const { home, away } = getTeams(competition)
-      const fixtureStatus = competition.status ?? event.status
-      return <article className="fixture-card" key={event.id}>
-        <div className="fixture-top"><span className={fixtureStatus?.type?.state === 'in' ? 'live-text' : ''}>{getMatchStatus(fixtureStatus)}</span><span>{competition.venue?.displayName ?? 'Premier League'}</span></div>
-        <div className="odds card-odds"><img src={DRAFT_KINGS_LOGO} alt="" /><span>Draft Kings</span></div>
-        <div className="card-teams">{[home, away].filter(Boolean).map((team) => <div className="team" key={team.id}><span className="team-name">{team.team?.logo && <img src={team.team.logo} alt="" />}{team.team?.displayName ?? 'TBC'}</span><strong>{team.score ?? '-'}</strong></div>)}</div>
-        {event.date && <p className="fixture-date">{new Date(event.date).toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' })}</p>}
-      </article>
-    })}</div>}
-    <p className="source-note">Source: ESPN · English Premier League</p>
-  </section>
-}
-
-function LoadingState() {
-  return <div className="loading-state"><span className="loader"></span><p>Gathering live fixtures...</p></div>
-}
-
-function SiteFooter() {
-  return <footer><span>MD / 2026</span><span>Football, in real time.</span><span>Scroll to explore</span></footer>
-}
-
-export default App
+export default HumidityCard
